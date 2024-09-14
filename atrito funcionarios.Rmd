@@ -1,0 +1,528 @@
+---
+title: "Análise de Sobrevivencia"
+author: "Clevia Bento de Oliveira"
+date: "2022-10-05"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    code_folding: hide
+    theme: cosmo
+    
+---
+
+# Desgaste de funcionários usando análise de sobrevivência.
+
+## Sobre o conjunto de dados
+
+Banco de dados sobre Atrito e desempenho de funcionários do IBM HR Analytics. Possui 35 variáveis, sendo 9 do tipo categórico e 26 do tipo numérico, com 1470 linhas. Descrição das variáveis
+
+**Age** - Idade
+
+**Attrition** - Atrito, variável resposta
+
+**BusinessTravel** - Viagem a trabalho
+
+**DailyRate** - Avaliação diária
+
+**Department** - Departamento
+
+**DistanceFromHome** - Distância de casa
+
+**Education** - Educação
+
+**EducationField** - Campo de Educação
+
+**EmployeeCount** - Contagem de funcionários
+
+**EnvironmentSatisfaction** - Nivel de satisfação
+
+**Gender** - Gênero
+
+**HourlyRate** - Taxa por hora
+
+**JobInvolvement** - Envolvimento com o trabalho
+
+**JobLevel** - Nível de trabalho
+
+**JobRole** - Cargo de trabalho
+
+**JobSatisfaction** - Satisfação com o trabalho
+
+**MaritalStatus** - Estado civil
+
+**MonthlyIncome** - Renda mensal
+
+**MonthlyRate** - Taxa mensal
+
+**NumCompaniesWorked** - Número de empresas trabalhadas
+
+**Over18** - Mais de 18 anos
+
+**OverTime** - Hora extra
+
+**PercentSalaryHike** - Percentual de aumento salarial
+
+**PerformanceRating** - Classificação de desempenho
+
+**RelationshipSatisfaction** - satisfação de relacionamento
+
+**StandardHours** - horario padrão
+
+**StockOptionLevel** -nivel de opção de ações
+
+**TotalWorkingYears** - Total de anos trabalhados
+
+**TrainingTimesLastYear** - Tempo de treinamento no ultimo ano
+
+**WorkLifeBalance** - Equilibrio da vida profissional
+
+**YearsAtCompany** - Anos na Empresa
+
+**YearsInCurrentRole** - Anos na função atual
+
+**YearsSinceLastPromotion** - Anos desde a ultima promoção
+
+**YearsWithCurrManager** - Anos com o gerente atual
+
+```{r, message=FALSE, warning=FALSE}
+library(readr)
+atrito <- read_csv("/Users/Clevia/Documents/Analise de Sobrevivencia/WA_Fn-UseC_-HR-Employee-Attrition.csv")
+```
+
+# Análise descritiva das variáveis
+
+```{r, message=FALSE, warning=FALSE}
+library(dplyr) #graficos
+require(ggplot2)#graficos
+library(summarytools)# análise descritiva
+library(tidyverse)
+library(survival) #analise de sobrevivencia
+library(ggfortify) #gráfico
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+options(warn=-1) #suppress warnings
+print(dfSummary(atrito,style = 'grid', valid.col = FALSE),method = 'render')
+
+```
+
+## Proporção da variável resposta no banco de dados
+
+Aproximadamente 84% não há atrito e aproximadamente 16% há atrito.
+
+```{r}
+atrito$YearsAtCompany[atrito$YearsAtCompany %in% c("0")]<- "1"
+#table(atrito$YearsAtCompany)
+#levels(atrito$YearsAtCompany)
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+
+number_of_attirttions <- atrito %>% group_by(Attrition) %>% summarise(Count=n())
+number_of_attirttions
+#visualization
+ggplot(data=number_of_attirttions, aes(x=Attrition, y=Count)) + 
+  geom_histogram(stat = "identity",fill="blue")
+```
+
+## Atrito por hora extra
+
+```{r}
+attrition_OverT= atrito %>% dplyr::select(Attrition, OverTime) %>% filter ( Attrition =="Yes" ) %>%group_by(OverTime)%>%summarise(Count=n())
+attrition_OverT
+
+ggplot(data=attrition_OverT, aes(x=OverTime, y=Count ,fill=OverTime))+
+geom_col()
+```
+
+Vemos que funcionário que fazem hora extra tem mais atrito do que funcionários que não fazem.
+
+## Atrito por departamento
+
+Aqui observamos o atrito entre funcionários por departamento. Vemos que no departamento de Pesquisa de Desenvolvimento há um maior número de atrito.
+
+```{r, message=FALSE, warning=FALSE}
+attach(atrito)
+
+dapartment_attrition <- atrito %>% 
+  dplyr::select(Department, Attrition) %>% 
+  filter(Attrition== "Yes") %>%
+  group_by(Department) %>% summarise(Count=n())
+
+#jobe_role <-attrition_employee %>% select(JobRole,Attrition) %>% filter(Attrition=='Yes') %>% group_by(JobRole)%>% summarise(Count=n())
+dapartment_attrition
+
+#visualisation of the data 
+ggplot(data=dapartment_attrition, aes(x=Department, y=Count , fill=Department))+
+geom_col()
+```
+
+## Atrito por gênero
+
+Observamos que há um maior número de atrito entre os funcionários do gênero masculino.
+
+```{r}
+attrition_gender= atrito %>% dplyr::select(Attrition, Gender) %>% filter ( Attrition =="Yes" ) %>%group_by(Gender)%>%summarise(Count=n())
+attrition_gender
+
+ggplot(data=attrition_gender, aes(x=Gender, y=Count ,fill=Gender))+
+geom_col()
+```
+
+# Atrito por viagem a trabalho
+
+```{r}
+attrition_businessT = atrito %>% dplyr::select(Attrition, BusinessTravel) %>% filter ( Attrition =="Yes" ) %>%group_by(BusinessTravel)%>%summarise(Count=n())
+attrition_businessT
+
+ggplot(data=attrition_businessT, aes(x=BusinessTravel, y=Count ,fill=BusinessTravel))+
+geom_col()
+```
+
+Vemos que há um número maior de atrito entre funcionários que raramente viajam a trabalho e um número menor de atrito entre funcionários que não viajam.
+
+# Atrito por função
+
+```{r}
+jobrole_attrition=  atrito %>% dplyr::select( Attrition,Department ,MonthlyIncome , JobRole) %>% filter (Attrition=="Yes") %>% group_by(JobRole) %>% summarise(Count=n()) 
+jobrole_attrition
+
+ggplot(data=jobrole_attrition, aes(x=JobRole, y=Count , fill= JobRole ))+
+geom_col() + 
+facet_wrap(~ JobRole)
+```
+
+Vemos que técnico de laboratório, executivo de vendas, cientista de pesquisa e representante de vendas têm a maior taxa de atrito entre as diferentes funções.
+
+```{r}
+#str(atrito)
+atrito$YearsAtCompany <- as.numeric(atrito$YearsAtCompany)
+#str(atrito)
+```
+
+
+```{r}
+
+atrito$event <- with(atrito,ifelse(Attrition=="Yes", 1, 0))
+
+time<-atrito$YearsAtCompany #define tempo
+event<-atrito$event #define evento
+#group<-atrito$OverTime #define groups to compare multiple survival curves
+survival<-Surv(time,event) #criação de survival object
+head(survival, n = 15)
+#survival
+```
+
+## Criando um modelo de sobrevivência
+
+```{r}
+model<- survfit(Surv(time,event) ~ 1)
+print(model, print.rmean=TRUE)
+summary(model)
+
+```
+
+Saída do modelo,
+
+**tempo** = os pontos de tempo em que a curva tem um passo
+
+**n.risco** = número de funcionários em risco de desligamento no tempo
+
+**t n.event** = o número de eventos que ocorrem no tempo t
+
+**survival** = estimativa de Kaplan-Meier (probabilidade de sobrevivência) no tempo t
+
+**std.err** = erro padrão da estimativa K-M no tempo t
+
+**lower IC 95%** = limite de confiança inferior para a curva de sobrevivência ou probabilidade
+
+**IC 95% upper** = limite de confiança superior para a curva ou probabilidade de sobrevivência
+
+O método padrão para a transformação para construção do intervalo de confiança é "log"
+
+## Plot do modelo
+
+```{r}
+autoplot(model)+ labs(x="Tempo em Anos",y="Sobrevivência",title="Gráfico de Sobrevivência")
+```
+
+## Estimador do risco acumulados de Kaplan-Meier
+
+```{r}
+
+autoplot(model, conf.int = T, surv.size= 1, fun = "cumhaz")+ labs(x="Tempo de Sobrevivência",y="Risco",title="Estimador de Risco Acumulado")
+
+```
+
+## Comparação entre curvas de sobrevivência
+
+## Hora Extra
+
+```{r}
+
+#comparação entre curvas 
+
+model_comp<- survfit(Surv(time,event) ~ atrito$OverTime, data = atrito)
+summary(model_comp)
+
+autoplot(model_comp, conf.int = F, surv.size= 1)+ labs(x="Tempo de Sobrevivência em anos",y="Probabilidade de Sobrevivência",title="Hora Extra",colour="Hora Extra")
+```
+
+### Teste de Peto
+
+```{r}
+
+survdiff(survival ~ atrito$OverTime, rho=1)
+```
+
+Como o p-valor é menor que 0,05 podemos concluir pelo teste de Peto que há diferença entre os extratos
+
+## Viagem á trabalho
+
+```{r}
+
+#comparação entre curvas 
+
+model_comp<- survfit(Surv(time,event) ~ atrito$BusinessTravel, data = atrito)
+summary(model_comp)
+
+autoplot(model_comp, conf.int = F, surv.size= 1)+ labs(x="Tempo de Sobrevivência em anos",y="Probabilidade de Sobrevivência",title="Viagem a trabalho",colour="Viagem a Trabalho")
+```
+
+### Teste de Peto
+
+```{r}
+
+survdiff(survival ~ atrito$BusinessTravel, rho=1)
+```
+
+Como o p-valor é menor que 0,05 podemos concluir pelo teste de Peto que há diferença entre os extratos
+
+## Gênero
+
+```{r}
+
+model_comp<- survfit(Surv(time,event) ~ atrito$Gender, data= atrito)
+summary(model_comp)
+
+autoplot(model_comp, conf.int = F, surv.size= 1)+ labs(x="Tempo de Sobrevivência",y="Probabilidade de Sobrevivência",title="Gênero",colour="Genero")
+```
+
+### Teste de Peto
+
+```{r}
+
+survdiff(survival ~ atrito$Gender, rho=1)
+```
+
+Como o p-valor é maior que 0,05 podemos concluir pelo teste de Peto que não há diferença significativa entre os extratos
+
+## Departamento
+
+```{r}
+model_comp<- survfit(Surv(time,event) ~ Department, data= atrito)
+summary(model_comp)
+
+autoplot(model_comp, conf.int = F, surv.size= 1)+ labs(x="Tempo de Sobrevivência",y="Probabilidade de Sobrevivência",title="Departamentos",colour="Departamentos")
+```
+
+### Teste de Peto
+
+```{r}
+
+survdiff(survival ~ atrito$Department, rho=1)
+```
+
+Como o p-valor é menor que 0,05 podemos concluir pelo teste de Peto que há diferença significativa entre os extratos
+
+## Cargo de Trabalho
+
+```{r}
+model_comp<- survfit(Surv(time,event) ~ JobRole, data= atrito)
+summary(model_comp)
+
+autoplot(model_comp, conf.int = F, surv.size= 1)+ labs(x="Tempo de Sobrevivência",y="Probabilidade de Sobrevivência",title="Cargo de Trabalho",colour="Cargo")
+
+```
+
+### Teste de Peto
+
+```{r}
+
+survdiff(survival ~ atrito$JobRole, rho=1)
+```
+
+Como o p-valor é menor que 0,05 podemos concluir pelo teste de Peto que há diferença significativa entre os extratos
+
+
+```{r}
+ajust1<-survreg(survival~1,dist="exponential")
+alpha1<-exp(ajust1$coefficients[1])
+```
+
+
+```{r}
+ajust2<-survreg(survival~1,dist="weibull")
+alpha2<-exp(ajust2$coefficients[1]);
+
+gama<-1/ajust2$scale
+
+ajust3<-survreg(survival~1,dist="lognorm")
+#S(T) KAPLA VS ESTIMATIVAS
+
+ekm<- survfit(survival~1, data= atrito)
+time<-ekm$time
+st<-ekm$surv
+ste<- exp(-time/alpha1)
+stw<- exp(-(time/alpha2)^gama)
+stln<- pnorm((-log(time)+ 4.778)/2.0347)
+cbind(time,st,ste,stw,stln)
+```
+
+
+# Ajuste de modelos
+
+
+```{r}
+ajuste_ex <-survreg(survival~ OverTime + BusinessTravel + Department + JobRole, data = atrito,  dist="exponential")
+summary(ajuste_ex)
+
+```
+
+```{r}
+ajuste_w <-survreg(survival~ OverTime + BusinessTravel + Department + JobRole, data = atrito,  dist="weibull")
+summary(ajuste_w)
+
+```
+```{r}
+ajuste_ln <-survreg(survival~ OverTime + BusinessTravel + Department + JobRole, data = atrito,  dist="lognormal")
+summary(ajuste_ln)
+```
+
+
+## Exponencial, Weibull e Lognormal 
+
+```{r message=FALSE, warning=FALSE}
+library(survival)
+library(rms)
+
+ajusteE <- psm( survival~OverTime + BusinessTravel + Department + JobRole  , data = atrito, dist="exponential")
+residE <- residuals(ajusteE)
+ajusteW <- psm(survival~OverTime + BusinessTravel + Department + JobRole  , data = atrito, dist="weibull")
+residW <- residuals(ajusteW)
+ajusteLN <- psm(survival~OverTime + BusinessTravel + Department + JobRole  , data = atrito, dist="lognormal")
+residLN <- residuals(ajusteLN)
+
+
+```
+
+# Escolha da melhor distribuição
+
+Vemos que a Weibull se ajusta melhor aos dados
+
+```{r message=FALSE, warning=FALSE}
+### Escolha da melhor distribuição
+par(mfrow=c(1,3))
+survplot(residE,main="Exponential",ylab="Complement of residual CDF")
+survplot(residW,main="Weibull",ylab="Complement of residual CDF")
+survplot(residLN,main="Lognormal",ylab="Complement of residual CDF")
+```
+
+# residuos deviance
+
+Nos residuos vemos que a distribuição dos pontos são semelhantes e ambos estão no intervalo de -3 a 3 então podemos considerar que não ha pontos de influência
+
+```{r message=FALSE, warning=FALSE}
+### residuos deviance
+residE_dev =  residuals(ajusteE, type = 'deviance')
+residW_dev =  residuals(ajusteW, type = 'deviance')
+residLN_dev =  residuals(ajusteLN, type = 'deviance')
+```
+```{r}
+par(mfrow=c(1,3))
+plot( residE_dev, ylim = c(-3,3) )
+plot( residW_dev, ylim = c(-3,3) )
+plot( residLN_dev, ylim = c(-3,3) )
+
+```
+
+
+# pontos influentes sobre os valores preditos
+
+Vemos que a log normal possui mais pontos dispersos 
+
+
+```{r message=FALSE, warning=FALSE}
+### residuos ldresp: pontos influentes sobre os valores preditos
+residE_ldresp =  residuals(ajusteE, type = 'ldresp')
+residW_ldresp =  residuals(ajusteW, type = 'ldresp')
+residLN_ldresp =  residuals(ajusteLN, type = 'ldresp')
+
+
+
+par(mfrow=c(1,3))
+plot( residE_ldresp )
+plot( residW_ldresp )
+plot( residLN_ldresp )
+```
+# pontos influentes sobre os parâmetros
+
+```{r message=FALSE, warning=FALSE}
+### residuos ldcase: pontos influentes sobre os parâmetros
+residE_ldcase =  residuals(ajusteE, type = 'ldcase')
+residW_ldcase =  residuals(ajusteW, type = 'ldcase')
+residLN_ldcase =  residuals(ajusteLN, type = 'ldcase')
+
+
+
+par(mfrow=c(1,3))
+plot( residE_ldcase )
+plot( residW_ldcase )
+plot( residLN_ldcase )
+
+
+```
+
+
+# Modelo proporcional de cox
+
+
+```{r message=FALSE, warning=FALSE}
+#### Modelo proporcional de cox 
+
+library(ggfortify)
+library(survminer)
+
+mod_cox = coxph( survival~OverTime + BusinessTravel + Department + JobRole  , data = atrito  )
+summary(mod_cox)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+test.ph = cox.zph(mod_cox)
+test.ph
+```
+
+# testando proporcionalidade
+
+```{r message=FALSE, warning=FALSE}
+### testando proporcionalidade
+ggcoxzph(test.ph)
+ggcoxdiagnostics( mod_cox, type = 'deviance', linear.predictions = F )
+```
+
+
+
+
+
+
+
+
+
+
+
+# Conclusão
+
+A partir da análise acima, podemos concluir que 'Hora Extra', 'Departamento', 'Viagem a trabalho' e 'Cargo de trabalho' afetam a taxa de atrito de funcionários. As curvas de sobrevivência mostram como os funcionários tem probabilidade de atrito em cada ponto do tempo. A mesma conclusão pode ser tirada do teste de Peto que resulta em um valor p significativo (\<0,05). A distribuição que melhor de ajustou aos dados foi a Weibull.
